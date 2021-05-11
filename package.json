@@ -1,0 +1,15 @@
+{
+  "name": "swbf-unmunge-gui",
+  "version": "1.0.0",
+  "description": "gui for swbf-unmunge",
+  "author":"RepComm",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "keywords": [],
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^12.0.7"
+  }
+}
