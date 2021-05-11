@@ -38,13 +38,7 @@ app.on('window-all-closed', () => {
   }
 })
 
-//Receive commands from web page here
-ipcMain.on("toMain", (event, args) => {
-  
-  // win.webContents.send("fromMain", "main response");
-
-  // win.webContents.send("fromMain", `main response, event: ${event}, args: ${args}`);
-
+function selectFiles () {
   dialog.showOpenDialog({
     properties: [
       "openFile",
@@ -52,7 +46,50 @@ ipcMain.on("toMain", (event, args) => {
     ]
   }).then((value=>{
     // value.filePaths
-    win.webContents.send("fromMain", value.filePaths.join(", "));
+    let jsonString = JSON.stringify({
+      status: "success",
+      type: "select-files-response",
+      result: {
+        filePaths: value.filePaths
+      }
+    });
+    win.webContents.send("main", jsonString);
   }));
+}
 
+function unknownAction (type) {
+  let jsonString = JSON.stringify({
+    status: "failure",
+    type: type,
+    message: `Unknown action: '${type}'`
+  });
+  win.webContents.send("main", jsonString);
+}
+
+function badJson (msg) {
+  let jsonString = JSON.stringify({
+    type: "bad-action",
+    status: "failure",
+    message: `Couldn't parse json from: '${msg}'`
+  });
+  win.webContents.send("main", jsonString);
+}
+
+//Receive commands from web page here
+ipcMain.on("main", (event, args) => {
+  let msg;
+  try {
+    msg = JSON.parse(args);
+  } catch (ex) {
+    badJson(args);
+  }
+
+  switch (msg.type) {
+    case "select-files":
+      selectFiles();
+      break;
+    default:
+      unknownAction(msg.type);
+      break;
+  }
 });
