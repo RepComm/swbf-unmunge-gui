@@ -4,10 +4,14 @@ A graphics interface for [sleepkiller/swbf-unmunge](https://github.com/SleepKill
 <br/>
 Written in TypeScript
 
+## Status
+Started - not functional
+
 ## Usage
 ### Install
 ### Running
 ### Screenshots
+![example.png](./example.png)
 
 ## Meta
 Frameworks Used:
