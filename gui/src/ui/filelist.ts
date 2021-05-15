@@ -45,4 +45,13 @@ export class FileList extends Panel {
     if (redraw) this.redraw();
     return this;
   }
+  getFiles (): string[] {
+    let result = new Array<string>(this.files.size);
+    let i=0;
+    for (let file of this.files) {
+      result[i] = file;
+      i++;
+    }
+    return result;
+  }
 }

@@ -1,9 +1,11 @@
 
-import { Exponent, EXPONENT_CSS_STYLES, Panel, runOnce } from "@repcomm/exponent-ts";
+import { Button, Exponent, EXPONENT_CSS_STYLES, Panel, runOnce } from "@repcomm/exponent-ts";
 
 import { Title } from "./ui/title";
 import { FileList } from "./ui/filelist";
 import { Select } from "./ui/select";
+import { FileInput } from "./ui/fileinput";
+import { Log } from "./ui/log";
 
 runOnce();
 
@@ -60,6 +62,46 @@ body {
 .select-panel-title {
   text-align: right;
 }
+.fileinput-path {
+  word-break: break-all;
+}
+.exponent-button {
+  background-color: #0c0c0c;
+}
+.fileinput-select {
+  height: 2em;
+  color: inherit;
+  border-radius: 0.5em;
+  flex: 0.5;
+}
+#go-button {
+  height: 2em;
+  color: inherit;
+  border-radius: 0.5em;
+  margin: 1em;
+  background-color: #2c5103;
+  font-size: large;
+  padding: 0.5em;
+}
+.log-message-area {
+  flex-direction: column;
+  height: 6em;
+  /* max-height: 4em; */
+  overflow-x: hidden;
+  overflow-y: scroll;
+  margin: 0em 1em 0em 1em;
+  border-radius: 0.5em;
+  background-color: #0a0a0a;
+}
+.log-message {
+  margin: 0.25em 2em 0em 2em;
+  word-break: break-all;
+  padding: 0.25em;
+  background-color: #232323;
+  white-space: pre-wrap;
+  border-radius: 0.25em;
+  color: #a1ccab;
+}
 `)
 .mount(document.head);
 
@@ -73,8 +115,11 @@ const title = new Title("swbf-unmunge-gui")
 const flist = new FileList()
 .mount(container);
 flist.getAddFilesButton().on("click", (evt)=>{
-  sendIPCJsonMessage({
+  ipcDoCommand({
     type: "select-files"
+  }).then((result)=>{
+    if (!result || !result.result || !result.result.filePaths || result.result.filePaths.length < 1) return;
+    flist.addFiles(result.result.filePaths, true);
   });
 });
 
@@ -137,44 +182,101 @@ class MainOptions extends Panel {
     .mount(this);
 
   }
+  getOutput (): string [] {
+    let result = new Array<string>();
+
+    result.push(`-version ${this.sourceGameVersion.getSelectedValue()}`);
+    result.push(`-outversion ${this.targetGameVersion.getSelectedValue()}`);
+    result.push(`-imgfmt ${this.targetImageFormat.getSelectedValue()}`);
+    result.push(`-platform ${this.sourcePlatform.getSelectedValue()}`);
+    if (this.verbosity.getSelectedValue() == "verbose") result.push("-verbose");
+    result.push(`-mode ${this.mode.getSelectedValue()}`);
+
+    return result;
+  }
 }
 
 const mainOpts = new MainOptions()
 .mount(container);
 
+const cliPathSelector = new FileInput()
+.setTitle("swbf-unmunge path:")
+.mount(container);
+cliPathSelector.getSelectButton().on("click", ()=>{
+  ipcDoCommand({
+    type: "select-file-swbfunmunge"
+  }).then((result)=>{
+    if (!result || !result.result || !result.result.filePaths || result.result.filePaths.length < 1) return;
+    cliPathSelector.setFilePath(result.result.filePaths[0]);
+    console.log("set path to swbf-unmunge:", result.result.filePaths[0]);
+  });
+});
+cliPathSelector.setFilePath(".\\swbf-unmunge.exe")
+
+const goBtn = new Button()
+.setId("go-button")
+.setTextContent("Go")
+.on("click", ()=>{
+  let path = cliPathSelector.getFilePath();
+  let args = "";
+  args += `-files ${flist.getFiles().join(";")} `;
+  args += mainOpts.getOutput().join(" ");
+  // console.log(command);
+  ipcDoCommand({
+    type: "unmunge",
+    unmunge: {
+      path: path,
+      args: args
+    }
+  });
+})
+.mount(container);
+
+const log = new Log()
+.setId("log")
+.mount(container);
+
 interface IPCJsonMessage {
-  type: "select-files"|"select-files-response"|"run-cli"|"bad-action";
+  type: "select-files"|
+  "select-files-response"|
+  "unmunge"|
+  "bad-action"|
+  "select-file-swbfunmunge-response"|
+  "select-file-swbfunmunge"|
+  "files-exist";
   message?: string;
   status?: "success"|"failure",
   result?: {
     filePaths?: string[]
+  },
+  input?: {
+    filePaths?: string[]
+  },
+  unmunge?: {
+    path: string,
+    args: string
   }
 }
 
-function sendIPCJsonMessage (msg: IPCJsonMessage) {
-  window["api"].send("main", JSON.stringify(msg));
-}
+function ipcDoCommand (msgIn: IPCJsonMessage): Promise<IPCJsonMessage> {
+  return new Promise(async (_resolve, _reject)=>{
+    let strIn = JSON.stringify(msgIn);
 
-window["api"].receive("main", (data) => {
-  // console.log(`Received "${data}"`);
-  let msg: IPCJsonMessage;
-  try {
-    msg = JSON.parse(data);
-  } catch (ex) {
-    console.error("Couldn't parse message from main ipc", ex);
+    let strOut = await window["api"].invoke("main", strIn);
+    let msgOut: IPCJsonMessage;
+    try {
+      msgOut = JSON.parse(strOut);
+    } catch {
+      _reject(`Could not parse json from "${strOut}"`);
+      return;
+    }
+    _resolve(msgOut);
     return;
-  }
+  });
 
-  switch (msg.type) {
-    case "select-files-response":
-      flist.addFiles(msg.result.filePaths);
-      // console.log("Select files response", msg.result.filePaths);
-      break;
-    case "bad-action":
-      console.error("bad action", msg);
-      break;
-    default:
-      //TODO handle
-      break;
-  }
+}
+
+window["api"].receive("main-log", (data)=>{
+  // console.log(data);
+  log.create(data);
 });
